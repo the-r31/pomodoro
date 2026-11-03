@@ -1,0 +1,76 @@
+.calendar-page { --accent: var(--green); max-width: 720px; margin: 0 auto; padding: 0 16px 22px; }
+.calendar-intro { padding: 9px 4px 18px; }
+.calendar-intro > span { color: var(--accent); font-size: 8px; letter-spacing: .17em; }
+.calendar-intro h2 { font-size: 26px; letter-spacing: -1px; font-weight: 550; margin: 8px 0; }
+.calendar-intro p { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.calendar-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.calendar-toolbar .period-tabs { background: var(--surface); padding: 4px; border-radius: 24px; margin: 0; }
+.calendar-toolbar .period-tabs button { padding: 8px 18px; }
+.calendar-board { border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: var(--surface); }
+.calendar-heading { display: flex; align-items: center; justify-content: space-between; padding: 15px 14px; }
+.calendar-heading h2 { font-size: 15px; font-weight: 550; }
+.calendar-heading button { font-size: 25px; color: var(--muted); padding: 0 9px; }
+.weekday-row { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; padding-bottom: 9px; color: var(--muted); font-size: 9px; }
+.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.month-cell { min-width: 0; height: 94px; padding: 4px 2px; border-top: 1px solid var(--line); border-right: 1px solid var(--line); }
+.month-cell:nth-child(7n) { border-right: 0; }
+.month-cell.selected-day { background: #ff87080b; box-shadow: inset 0 0 0 1px var(--accent); }
+.day-number { display: block; margin: 0 auto 5px; font-size: 11px; height: 24px; width: 24px; border-radius: 50%; }
+.is-today { background: var(--accent); color: #fff; }
+.outside .day-number { color: var(--muted); }
+.calendar-chip { display: block; width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 3px; padding: 2px 3px; margin-bottom: 2px; font-size: 8px; line-height: 10px; }
+.color-blue { background: #bcd3ff; color: #244775; }
+.color-pink { background: #f6c4d8; color: #71394f; }
+.color-mint { background: #baead8; color: #255e4c; }
+.color-purple { background: #ddcdfa; color: #59417b; }
+.color-amber { background: #f5dfaa; color: #71551c; }
+.more-events { display: block; font-size: 8px; color: var(--muted); padding: 0 2px; }
+.event-done { text-decoration: line-through; opacity: .6; }
+.time-scroll { overflow: auto; max-height: 430px; border-top: 1px solid var(--line); }
+.time-board { min-width: 260px; }
+.week-board { min-width: 650px; }
+.time-header { display: flex; position: sticky; top: 0; background: var(--surface); z-index: 2; height: 48px; border-bottom: 1px solid var(--line); }
+.time-header > span { width: 42px; flex-shrink: 0; }
+.time-header button { flex: 1; font-size: 10px; color: var(--muted); }
+.time-header b { display: block; font-size: 15px; font-weight: 500; margin-top: 3px; }
+.time-header .selected { color: var(--accent); }
+.time-columns { display: flex; height: 1248px; }
+.time-labels { width: 42px; flex-shrink: 0; }
+.time-labels span { display: block; height: 52px; font-size: 9px; color: var(--muted); padding: 2px 4px; }
+.time-day { position: relative; flex: 1; border-left: 1px solid var(--line); background: repeating-linear-gradient(to bottom, var(--line) 0, var(--line) 1px, transparent 1px, transparent 52px); }
+.time-event { position: absolute; border: 1px solid var(--surface); border-radius: 5px; padding: 3px 5px; text-align: left; overflow: hidden; min-width: 0; }
+.time-event b { display: block; font-size: 10px; line-height: 13px; overflow-wrap: anywhere; font-weight: 550; }
+.time-event small { display: block; font-size: 9px; margin-top: 3px; }
+.calendar-agenda, .unscheduled { margin-top: 22px; }
+.calendar-agenda h2, .unscheduled h2 { font-size: 13px; font-weight: 550; }
+.calendar-empty { padding: 24px 10px; text-align: center; background: var(--surface); border-radius: 16px; margin-top: 12px; }
+.calendar-empty b { font-size: 13px; font-weight: 500; }
+.calendar-empty p { font-size: 11px; color: var(--muted); margin: 6px 0 15px; }
+.calendar-empty button { font-size: 12px; color: var(--accent); }
+.agenda-item { display: flex; align-items: center; gap: 10px; padding: 14px 10px; background: var(--surface); margin-top: 9px; border-radius: 12px; }
+.agenda-stripe { width: 3px; height: 32px; border-radius: 3px; flex-shrink: 0; }
+.agenda-item input { accent-color: var(--accent); }
+.agenda-title { flex: 1; min-width: 0; text-align: left; }
+.agenda-title b { display: block; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.agenda-title small { display: block; color: var(--muted); font-size: 10px; margin-top: 5px; }
+.focus-task { color: var(--accent); padding: 8px; }
+.focus-task:disabled { cursor: default; }
+.unscheduled > button { display: flex; gap: 12px; justify-content: space-between; width: 100%; padding: 14px 2px; border-bottom: 1px solid var(--line); text-align: left; }
+.unscheduled > button span { overflow-wrap: anywhere; font-size: 12px; min-width: 0; }
+.unscheduled small { color: var(--accent); white-space: nowrap; font-size: 10px; }
+.calendar-footer { color: var(--muted); font-size: 10px; line-height: 1.6; margin-top: 22px; text-align: center; }
+.calendar-modal { position: fixed; inset: 0; z-index: 20; background: #000a; display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
+.calendar-modal form { width: 100%; max-width: 380px; max-height: calc(100vh - 32px); overflow-y: auto; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; }
+.calendar-modal h2 { font-size: 18px; }
+.calendar-modal .card-heading > button { font-size: 25px; }
+.calendar-modal label { display: flex; flex-direction: column; gap: 7px; margin-top: 17px; color: var(--muted); font-size: 11px; }
+.calendar-modal input { width: 100%; min-width: 0; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 13px; color-scheme: dark; }
+:root[data-theme="light"] .calendar-modal input { color-scheme: light; }
+.time-inputs { display: flex; gap: 12px; }
+.time-inputs label { flex: 1; min-width: 0; }
+.calendar-modal fieldset { border: 0; margin: 20px 0; padding: 0; }
+.calendar-modal legend { color: var(--muted); font-size: 11px; margin-bottom: 10px; }
+.color-choice { width: 30px; height: 30px; border-radius: 50%; margin-right: 10px; }
+.color-choice[aria-pressed="true"] { outline: 2px solid var(--text); outline-offset: 3px; }
+.calendar-modal .primary { width: 100%; padding: 12px; margin-top: 10px; }
+.unschedule-button { width: 100%; margin-top: 16px; color: var(--muted); font-size: 11px; }
