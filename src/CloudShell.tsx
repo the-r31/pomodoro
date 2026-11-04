@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import App from "./App";
+import AccountAccess, { AccountProfile } from "./AccountAccess";
 import { supabase } from "./supabase-client";
 import { applySnapshot, capture, cloudKeys, decideSync, fingerprint } from "./cloud-data";
 import type { Binding, CloudRow, Snapshot } from "./cloud-data";
@@ -16,9 +17,7 @@ export default function CloudShell() {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const [epoch, setEpoch] = useState(0);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [recovering, setRecovering] = useState(false);
   const [status, setStatus] = useState("Local only");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -32,6 +31,13 @@ export default function CloudShell() {
   const [paused, setPaused] = useState(() => localStorage.getItem("pomo-sync-paused") === "1");
   const pausedRef = useRef(paused);
   const [lastSync, setLastSync] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = overflow; previous?.focus(); };
+  }, [open]);
   const saveBinding = (row: CloudRow) => {
     const next = { userId: row.user_id, revision: row.revision, base: row.data };
     localStorage.setItem("pomo-cloud-binding", JSON.stringify(next)); binding.current = next;
@@ -87,10 +93,10 @@ export default function CloudShell() {
     const accept = (value: Session | null) => {
       if (!alive) return;
       if (sessionRef.current?.user.id !== value?.user.id) { generation.current++; conflictRef.current = null; setConflict(null); setChoice(null); }
-      sessionRef.current = value; setSession(value); setReady(true);
+      sessionRef.current = value; setSession(value); setReady(true); if (!value) setRecovering(false);
     };
     void supabase.auth.getSession().then(({ data, error }) => { if (error && alive) setError(error.message); accept(data.session); }).catch(() => { if (alive) { setReady(true); setError("Could not restore your login. Your local data is still available."); } });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, value) => accept(value));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, value) => { if (event === "PASSWORD_RECOVERY") { setRecovering(true); setOpen(true); } accept(value); });
     return () => { alive = false; subscription.unsubscribe(); window.removeEventListener("pomo-open-account", show); };
   }, []);
   useEffect(() => {
@@ -101,16 +107,6 @@ export default function CloudShell() {
     window.addEventListener("pomo-sync-request", requested);
     return () => { clearInterval(id); clearTimeout(pending); window.removeEventListener("online", tick); window.removeEventListener("pomo-sync-request", requested); };
   }, [session?.user.id, synchronize]);
-  const auth = async () => {
-    if (!supabase || busy) return; setBusy(true); setError(""); setMessage("");
-    try {
-      const result = mode === "signin" ? await supabase.auth.signInWithPassword({ email: email.trim(), password }) : await supabase.auth.signUp({ email: email.trim(), password });
-      if (result.error) throw result.error;
-      setPassword("");
-      if (mode === "signup" && !result.data.session) setMessage("Check your email to confirm your account, then return here and sign in. If the confirmation link opens an unavailable page, return here and try signing in after confirming.");
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not sign in."); }
-    finally { setBusy(false); }
-  };
   const prepare = async () => {
     if (!session || busy) return; setBusy(true); setError("");
     const uid = session.user.id;
@@ -118,6 +114,9 @@ export default function CloudShell() {
     catch (e) { setError(e instanceof Error ? e.message : "Could not connect."); }
     finally { setBusy(false); }
   };
+  useEffect(() => {
+    if (open && session && !recovering && !(binding.current?.userId === session.user.id && localStorage.getItem("pomo-data-owner") === session.user.id)) void prepare();
+  }, [open, session?.user.id, recovering]);
   const connect = async (source: "cloud" | "device" | "empty" | "backup") => {
     if (!session || !choice || busy || inFlight.current) return;
     setBusy(true); inFlight.current = true; setError(""); const uid = session.user.id;
@@ -184,16 +183,21 @@ export default function CloudShell() {
   const connected = !!session && binding.current?.userId === session.user.id && localStorage.getItem("pomo-data-owner") === session.user.id;
   return <><App key={epoch}/>{connected && !open && (conflict || error) && <button className="cloud-attention" onClick={() => setOpen(true)}>{conflict ? "Review sync changes" : "Sync needs attention"}</button>}{open && <div className="cloud-overlay" role="dialog" aria-modal="true" aria-label="Account and sync" onKeyDown={e => {
     if (e.key === "Escape" && !busy) setOpen(false);
-    if (e.key === "Tab") { const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button, input, a')).filter(el => !el.hasAttribute('disabled')); const first = items[0], last = items[items.length - 1]; if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
+    if (e.key === "Tab") { const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button, input, a, summary')).filter(el => !el.hasAttribute('disabled') && el.getClientRects().length > 0); const first = items[0], last = items[items.length - 1]; if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
   }}><section className="cloud-panel"><header><h2>Account & sync</h2><button autoFocus aria-label="Close account" disabled={busy} onClick={() => setOpen(false)}>×</button></header><p className="cloud-caption">Your planner, across your devices.</p>
-    {!supabase ? <p>Cloud sync is not configured in this build. You can keep using the app locally.</p> : !ready ? <p>Checking your account…</p> : !session ? <><div className="cloud-tabs"><button aria-pressed={mode === "signin"} onClick={() => { setMode("signin"); setError(""); }}>Sign in</button><button aria-pressed={mode === "signup"} onClick={() => { setMode("signup"); setError(""); }}>Create account</button></div><form onSubmit={e => { e.preventDefault(); void auth(); }}><label>Email<input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)}/></label><label>Password<input type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} required minLength={mode === "signup" ? 8 : 1} value={password} onChange={e => setPassword(e.target.value)}/></label><button className="primary" disabled={busy}>{busy ? "Please wait…" : mode === "signup" ? "Create account" : "Sign in"}</button></form><p className="cloud-note">Email confirmation is required for new accounts. Signing in does not upload your existing data until you connect sync.</p></> : <><p className="cloud-email">{session.user.email}</p><div className="cloud-status">{connected ? paused ? "Sync paused" : status : "Signed in · sync not connected"}{lastSync && connected && <small>Last synced {lastSync}</small>}</div>
+    {!supabase ? <p>Cloud sync is not configured in this build. You can keep using the app locally.</p> : !ready ? <p>Checking your account…</p> : !session ? <AccountAccess/> : <><div className="account-identity"><span className="account-avatar" aria-hidden="true">{String(session.user.user_metadata.display_name || session.user.email || "?").slice(0, 1).toUpperCase()}</span><div><h3>{String(session.user.user_metadata.display_name || "Your account")}</h3><p className="cloud-email">{session.user.email}</p></div></div>{recovering && <p role="status" className="cloud-message">Recovery verified. Open Security below to set your new password.</p>}<AccountProfile key={session.user.id} name={String(session.user.user_metadata.display_name || "")} recovering={recovering} onSaved={() => setRecovering(false)}/><section className="account-section"><h3 className="account-section-title">Sync & backup</h3><div className="cloud-status">{connected ? paused ? "Sync paused" : status : "Signed in · sync not connected"}{lastSync && connected && <small>Last synced {lastSync}</small>}</div>
       {!connected && <><button className="primary" disabled={busy} onClick={() => void prepare()}>Check cloud workspace</button>{choice && <div className="sync-choice">{choice.row ? <><h3>Cloud workspace found</h3><p>Load this account's data on this device. The current local workspace is backed up first. The saved timer resumes paused on this device.</p><button disabled={busy} onClick={() => void connect("cloud")}>Use cloud workspace</button></> : <><h3>Set up personal sync</h3><p>Choose what to upload. Your data will be stored in your account.</p><button disabled={busy || !["guest", session.user.id].includes(localStorage.getItem("pomo-data-owner") || "guest")} onClick={() => void connect("device")}>Upload this device's workspace</button><button disabled={busy} onClick={() => void connect("empty")}>Start with an empty workspace</button></>}</div>}</>}
       {!connected && choice && read<{ binding?: Binding } | null>(`pomo-cloud-backup:${session.user.id}`, null)?.binding?.userId === session.user.id && <div className="sync-choice"><p>This device has a saved account copy, which may contain unsynced changes.</p><button disabled={busy} onClick={() => void connect("backup")}>Resume saved account copy</button></div>}
-      {connected && <><div className="cloud-actions"><button disabled={busy || paused} onClick={() => void synchronize()}>Sync now</button><button disabled={busy} onClick={() => { const next = !paused; pausedRef.current = next; setPaused(next); localStorage.setItem("pomo-sync-paused", next ? "1" : "0"); if (!next) void synchronize(); }}>{paused ? "Resume sync" : "Pause sync"}</button></div><p className="cloud-note">Tasks, lists, habits, settings, focus statistics and timer checkpoints sync about every 15 seconds while the app is open. Timer controls request an immediate sync. On another device, the saved timer opens paused; press Start to continue.</p></>}
-      {conflict && <div className="sync-choice"><h3>Both devices made changes</h3><p>Choose which complete workspace to keep. This version does not automatically combine edits. Both versions are backed up on this device before replacement.</p><div className="cloud-actions"><button onClick={() => download(capture(localStorage), "pomodoro-device.json")}>Download device copy</button><button onClick={() => download(conflict.data, "pomodoro-cloud.json")}>Download cloud copy</button></div><button disabled={busy} onClick={() => void resolve("cloud")}>Keep cloud version</button><button disabled={busy} onClick={() => void resolve("device")}>Keep this device's version</button></div>}
-      <button className="sign-out" disabled={busy} onClick={() => void signOut()}>Sign out on this device</button><p className="cloud-note">Signing out keeps a local backup of this account's changes, then restores your local workspace.</p></>}
+      {connected && <><div className="cloud-actions"><button disabled={busy || paused} onClick={() => void synchronize()}>Sync now</button><button disabled={busy} onClick={() => { const next = !paused; pausedRef.current = next; setPaused(next); localStorage.setItem("pomo-sync-paused", next ? "1" : "0"); if (!next) void synchronize(); }}>{paused ? "Resume sync" : "Pause sync"}</button></div><p className="cloud-note">Your planner saves across devices while the app is open. On another device, your timer resumes paused.</p></>}
+      {conflict && <div className="sync-choice"><h3>Both devices made changes</h3><p>Compare the copies, then choose one to keep. Both copies are backed up before replacement; edits are not combined.</p><div className="workspace-comparison"><WorkspaceSummary title="This device" data={capture(localStorage)}/><WorkspaceSummary title="Cloud copy" data={conflict.data}/></div><div className="cloud-actions"><button onClick={() => download(capture(localStorage), "pomodoro-device.json")}>Download device copy</button><button onClick={() => download(conflict.data, "pomodoro-cloud.json")}>Download cloud copy</button></div><button disabled={busy} onClick={() => void resolve("cloud")}>Keep cloud version</button><button disabled={busy} onClick={() => void resolve("device")}>Keep this device's version</button></div>}
+      <button className="backup-button" onClick={() => download(capture(localStorage), "pomodoro-workspace-backup.json")}>Download workspace backup</button></section><button className="sign-out" disabled={busy} onClick={() => void signOut()}>Sign out on this device</button><p className="cloud-note">Signing out keeps a local backup of this account's changes, then restores your local workspace.</p></>}
     {message && <p role="status" className="cloud-message">{message}</p>}{error && <p role="alert" className="cloud-error">{error}</p>}
-    <button className="backup-button" onClick={() => download(capture(localStorage), "pomodoro-workspace-backup.json")}>Download workspace backup</button>
+    {!session && <button className="backup-button" onClick={() => download(capture(localStorage), "pomodoro-workspace-backup.json")}>Download workspace backup</button>}
   </section></div>}</>;
 }
 
+
+function WorkspaceSummary({ title, data }: { title: string; data: Snapshot }) {
+  const tasks = (() => { try { return JSON.parse(data.values["pomo-workspace"] || '{"tasks":[]}').tasks as { done: boolean; title: string }[]; } catch { return []; } })();
+  return <div><h4>{title}</h4><strong>{tasks.length} tasks</strong><small>{tasks.filter(t => t.done).length} completed</small><ul>{tasks.slice(-3).map((task, index) => <li key={index}>{task.title}</li>)}</ul>{tasks.length > 3 && <small>Showing 3 of {tasks.length}</small>}</div>;
+}

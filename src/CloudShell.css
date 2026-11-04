@@ -4,3 +4,28 @@
 .cloud-panel form { margin-top: 20px; }.cloud-panel label { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; color: var(--muted); font-size: 12px; }.cloud-panel input { background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 13px; font: inherit; width: 100%; }.cloud-panel .primary { width: 100%; padding: 13px; margin-top: 8px; font-size: 11px; }
 .cloud-note { color: var(--muted); font-size: 11px; line-height: 1.7; margin: 15px 0; }.cloud-email { font-size: 14px; overflow-wrap: anywhere; }.cloud-status { background: var(--surface); padding: 16px; border-radius: 14px; color: var(--green); margin: 18px 0; font-size: 13px; }.cloud-status small { display: block; color: var(--muted); font-size: 10px; margin-top: 7px; }
 .cloud-actions { display: flex; gap: 10px; flex-wrap: wrap; }.cloud-actions button, .sync-choice > button { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 11px; }.sync-choice { padding: 16px; border: 1px solid var(--line); border-radius: 14px; margin: 16px 0; }.sync-choice h3 { font-size: 14px; }.sync-choice p { font-size: 12px; color: var(--muted); line-height: 1.7; margin: 10px 0; }.sync-choice > button { display: block; width: 100%; margin-top: 10px; color: var(--green); }.sign-out { margin-top: 15px; color: var(--muted); text-decoration: underline; font-size: 12px; }.cloud-error { color: #ed9c8b; background: #ef6f5711; padding: 12px; border-radius: 10px; font-size: 12px; line-height: 1.7; margin-top: 12px; }.cloud-message { color: var(--green); font-size: 12px; line-height: 1.7; margin: 14px 0; }.backup-button { color: var(--muted); font-size: 11px; margin: 18px 0; text-decoration: underline; }.cloud-attention { position: fixed; bottom: 14px; right: 14px; z-index: 60; padding: 10px 15px; border-radius: 20px; background: var(--green); color: var(--bg); font-size: 11px; box-shadow: 0 3px 15px #0006; }
+.account-identity { display: flex; align-items: center; gap: 14px; margin: 24px 0; }
+.account-identity > div { min-width: 0; }
+.account-identity h3 { font-size: 17px; font-weight: 550; overflow-wrap: anywhere; }
+.account-identity .cloud-email { font-size: 12px; color: var(--muted); margin-top: 5px; }
+.account-avatar { display: grid; place-items: center; flex: 0 0 48px; height: 48px; border: 1px solid #ff870840; border-radius: 16px; color: var(--green); background: #ff870814; font-size: 22px; }
+.account-section { border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-top: 12px; }
+.account-section summary { cursor: pointer; font-size: 13px; font-weight: 550; padding: 2px 0; }
+.account-section-title { font-size: 13px; font-weight: 550; margin-top: 18px; }
+.account-section > .account-section-title { margin-top: 0; }
+.account-section .cloud-status { margin: 14px 0; }
+.account-section .backup-button { margin-bottom: 0; }
+.password-field { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.cloud-panel .password-field input { min-width: 0; border: 0; background: transparent; }
+.password-field button { flex-shrink: 0; padding: 12px; font-size: 11px; color: var(--muted); }
+.account-help { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.account-help button { color: var(--muted); font-size: 11px; text-decoration: underline; text-underline-offset: 3px; }
+.workspace-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; }
+.workspace-comparison > div { padding: 12px; border-radius: 10px; background: var(--surface); }
+.workspace-comparison h4 { color: var(--muted); font-size: 11px; font-weight: 400; }
+.workspace-comparison strong { display: block; margin: 10px 0 5px; font-size: 16px; }
+.workspace-comparison small { font-size: 10px; color: var(--muted); }
+.workspace-comparison ul { padding-left: 14px; margin-top: 10px; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.cloud-panel button:disabled { opacity: .5; cursor: wait; }
+.cloud-panel :focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+@media (max-width: 360px) { .cloud-overlay { padding: 16px; } .account-section { padding: 12px; } }

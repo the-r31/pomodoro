@@ -7,7 +7,9 @@ await new Promise((resolve, reject) => { server.stdout.on('data', d => { if (d.t
 let browser;
 const rows = new Map(); let configured = false; let offline = false;
 const alice = '11111111-1111-4111-8111-111111111111', bob = '22222222-2222-4222-8222-222222222222';
-const user = (id) => ({ id, aud: 'authenticated', role: 'authenticated', email: id === alice ? 'alice@example.test' : 'bob@example.test', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString() });
+const profiles = new Map();
+const authCalls = [];
+const user = (id) => ({ id, aud: 'authenticated', role: 'authenticated', email: id === alice ? 'alice@example.test' : 'bob@example.test', app_metadata: { provider: 'email' }, user_metadata: profiles.get(id) || {}, created_at: new Date().toISOString() });
 const jwt = id => `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: id, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.test`;
 const uid = req => { try { return JSON.parse(Buffer.from(req.headers().authorization.split(' ')[1].split('.')[1], 'base64url')).sub; } catch { return null; } };
 async function makePage() {
@@ -18,6 +20,18 @@ async function makePage() {
     if (url.pathname.endsWith('/token')) {
       const body = req.postDataJSON(), id = body.email === 'bob@example.test' ? bob : alice;
       return reply({ access_token: jwt(id), refresh_token: `refresh-${id}`, token_type: 'bearer', expires_in: 3600, user: user(id) });
+    }
+    if (url.pathname.endsWith('/recover') || url.pathname.endsWith('/resend')) { authCalls.push(url.pathname); return reply({}); }
+    if (url.pathname.endsWith('/verify')) {
+      assert.equal(req.postDataJSON().type, 'recovery');
+      assert.equal(req.postDataJSON().token_hash, 'test-recovery-token');
+      return reply({ access_token: jwt(alice), refresh_token: 'recovery-refresh', token_type: 'bearer', expires_in: 3600, user: user(alice) });
+    }
+    if (url.pathname.endsWith('/user') && req.method() === 'PUT') {
+      const body = req.postDataJSON();
+      if (body.data) profiles.set(uid(req), body.data);
+      if (body.password) authCalls.push('password-updated');
+      return reply(user(uid(req)));
     }
     if (url.pathname.endsWith('/signup')) return reply({ user: user(alice), session: null });
     if (url.pathname.endsWith('/logout')) return reply({});
@@ -51,6 +65,36 @@ const addTask = async (p, title) => { await p.getByLabel('New task', { exact: tr
 const sync = async p => { await p.getByRole('button', { name: 'Sync now', exact: true }).click(); await p.waitForFunction(() => !document.querySelector('.cloud-status')?.textContent?.includes('Syncing')); };
 try {
   browser = await chromium.launch({ channel: 'msedge', headless: true });
+  const account = await makePage(); await open(account);
+  await account.getByLabel('Email', { exact: true }).fill('alice@example.test');
+  await account.getByLabel('Password', { exact: true }).fill('test-password-123');
+  await account.getByRole('button', { name: 'Show password', exact: true }).click();
+  assert.equal(await account.getByLabel('Password', { exact: true }).getAttribute('type'), 'text');
+  await account.getByRole('button', { name: 'Resend confirmation', exact: true }).click();
+  await account.getByRole('status').filter({ hasText: 'Check your email' }).waitFor();
+  assert.ok(authCalls.some(p => p.endsWith('/resend')));
+  await account.getByRole('button', { name: 'Forgot password?', exact: true }).click();
+  await account.getByRole('button', { name: 'Send recovery email', exact: true }).click();
+  await account.getByRole('status').filter({ hasText: 'recovery email is on its way' }).waitFor();
+  assert.ok(authCalls.some(p => p.endsWith('/recover')));
+  await account.getByLabel('Recovery link', { exact: true }).fill('https://example.test/?token=test-recovery-token&type=recovery');
+  await account.getByRole('button', { name: 'Verify recovery link', exact: true }).click();
+  await account.getByLabel('New password', { exact: true }).fill('new-password-123');
+  await account.getByLabel('Confirm new password', { exact: true }).fill('mismatch-password');
+  await account.getByRole('button', { name: 'Update password', exact: true }).click();
+  await account.getByRole('alert').filter({ hasText: 'Passwords do not match' }).waitFor();
+  assert.ok(!authCalls.includes('password-updated'));
+  await account.getByLabel('Confirm new password', { exact: true }).fill('new-password-123');
+  await account.getByRole('button', { name: 'Update password', exact: true }).click();
+  await account.getByRole('status').filter({ hasText: 'Password updated' }).waitFor();
+  assert.ok(authCalls.includes('password-updated'));
+  await account.locator('summary').filter({ hasText: /^Profile$/ }).click();
+  await account.getByLabel('Display name', { exact: true }).fill('Alice Focus');
+  await account.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await account.getByRole('heading', { name: 'Alice Focus', exact: true }).waitFor();
+  assert.equal(rows.size, 0, 'Profile and recovery must not upload a workspace');
+  await account.screenshot({ path: 'tests/account-preview.png', fullPage: false });
+  await account.context().close();
   const p1 = await makePage();
   await addTask(p1, 'Original local');
   await signIn(p1, 'alice@example.test'); assert.equal(rows.size, 0);
@@ -71,7 +115,7 @@ try {
   await addTask(p2, 'Device two pending'); await close(p1); await addTask(p1, 'Device one concurrent'); await open(p1); await sync(p1);
   await open(p2); await sync(p2);
   await p2.getByRole('heading', { name: 'Both devices made changes' }).waitFor();
-  await p2.screenshot({ path: 'tests/cloud-conflict-preview.png', fullPage: true });
+  await p2.screenshot({ path: 'tests/cloud-conflict-preview.png', fullPage: false });
   await p2.getByRole('button', { name: 'Keep cloud version', exact: true }).click();
   await p2.waitForFunction(() => !!localStorage.getItem('pomo-conflict-backup'));
   assert.match(await p2.evaluate(() => localStorage.getItem('pomo-conflict-backup')), /Device two pending/);
@@ -111,7 +155,7 @@ try {
   await p2.reload();
   assert.equal(await p2.evaluate(() => JSON.parse(localStorage.getItem('pomo-records')).length), 2);
   await p1.getByRole('button', { name: 'Sign out on this device', exact: true }).click();
-  await p1.locator('.cloud-panel form').waitFor(); await close(p1);
+  await p1.getByLabel('Email', { exact: true }).waitFor(); await close(p1);
   const guestText = await p1.locator('.tasks').textContent(); assert.match(guestText, /Original local/); assert.doesNotMatch(guestText, /From device one/);
   await signIn(p1, 'bob@example.test'); await p1.getByRole('button', { name: 'Check cloud workspace', exact: true }).click();
   await p1.getByRole('button', { name: 'Start with an empty workspace', exact: true }).click();

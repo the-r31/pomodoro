@@ -1,6 +1,10 @@
 # Pomodoro (Tauri v2 + React + TS)
 
 ## Personal cloud sync (Supabase)
+The Account screen groups profile editing, password changes, and sync/backup controls. Signing in checks for an existing cloud workspace automatically; uploading or replacing local data still requires choosing a workspace. Conflict cards show task counts and up to three task titles from each copy.
+
+For password recovery, choose **Forgot password?**, request the email, then copy the original recovery link from the email into **Recovery link** without opening it. This verifies the recovery token inside the desktop app, avoiding a browser-to-desktop redirect. Set and confirm the new password under **Security**. Used or expired links require a new recovery email. Standard Supabase recovery links with `token` or `token_hash` and `type=recovery` are supported; custom email templates must preserve those parameters. Email delivery and real recovery tokens still require testing against the configured project's email setup; automated UI tests use a mock backend only.
+
 1. Copy `.env.example` to `.env.local` and set your project URL and **publishable** key. Never use a secret/service-role key in this desktop app.
 2. Run `supabase/setup-personal-sync.sql` in your project's SQL Editor. It creates an owner-only table, RLS policies, and revision trigger. The statements at the end report the grants and policies.
 3. Restart the development process after changing `.env.local`, or rebuild the packaged app.
