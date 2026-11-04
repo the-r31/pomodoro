@@ -81,7 +81,9 @@ export default function App() {
   });
   const [history, setHistory] = useState<Record<string, number>>(() => load("pomo-history", {}));
   const [dark, setDark] = useState<boolean>(() => localStorage.getItem("pomo-dark") !== "0");
-  const [saved] = useState(() => load("pomo-timer", { mode: "focus" as Mode, left: settings.focus * 60, running: false, cycle: 0, endAt: 0, total: settings.focus * 60, segments: [] as FocusRecord["segments"], segmentStart: 0, task: "" }));
+  const [saved] = useState(() => load(localStorage.getItem("pomo-timer") ? "pomo-timer" : "pomo-timer-checkpoint", { mode: "focus" as Mode, left: settings.focus * 60, running: false, cycle: 0, endAt: 0, total: settings.focus * 60, segments: [] as FocusRecord["segments"], segmentStart: 0, task: "", sessionId: "" }));
+  const sessionId = useRef(saved.sessionId || crypto.randomUUID());
+  const [timerVersion, setTimerVersion] = useState(0);
   const segments = useRef<FocusRecord["segments"]>(Array.isArray(saved.segments) ? saved.segments : []);
   const segmentStart = useRef(saved.segmentStart || 0);
   const sessionTask = useRef(saved.task || "");
@@ -108,9 +110,64 @@ export default function App() {
   const [minutes, setMinutes] = useState<Record<string, number>>(() => load("pomo-minutes", {}));
   const activeTask = tasks.find(t => !t.done);
 
-  useEffect(() => localStorage.setItem("pomo-minutes", JSON.stringify(minutes)), [minutes]);
-  useEffect(() => localStorage.setItem("pomo-records", JSON.stringify(records)), [records]);
-  useEffect(() => localStorage.setItem("pomo-timer", JSON.stringify({ mode, left, running, cycle, endAt: endAt.current, total, segments: segments.current, segmentStart: segmentStart.current, task: sessionTask.current })), [mode, left, running, cycle, total]);
+  useEffect(() => localStorage.setItem("pomo-timer", JSON.stringify({ mode, left, running, cycle, endAt: endAt.current, total, segments: segments.current, segmentStart: segmentStart.current, task: sessionTask.current, sessionId: sessionId.current })), [mode, left, running, cycle, total, timerVersion]);
+
+  const saveFocus = useCallback((until = Date.now(), completed = false) => {
+    if (mode !== "focus") return;
+    const end = Math.min(until, endAt.current || until);
+    if (segmentStart.current && end > segmentStart.current) {
+      segments.current.push({ start: segmentStart.current, end });
+      segmentStart.current = running ? end : 0;
+    }
+    let previous: FocusRecord[] = [];
+    try { const data = JSON.parse(localStorage.getItem("pomo-records") || "[]"); if (Array.isArray(data)) previous = data; } catch { /* Keep the timer usable offline. */ }
+    const old = previous.find(r => r.id === sessionId.current);
+    const elapsed = segments.current.reduce((sum, s) => sum + (s.end - s.start) / 60000, 0);
+    if (!elapsed) return;
+    const nextMinutes = load<Record<string, number>>("pomo-minutes", {});
+    const byDay = (items: FocusRecord["segments"], direction: number) => {
+      for (const s of items) {
+        let cursor = s.start;
+        while (cursor < s.end) {
+          const d = new Date(cursor), boundary = new Date(cursor); boundary.setHours(24, 0, 0, 0);
+          const next = Math.min(s.end, +boundary), key = today(d);
+          nextMinutes[key] = Math.max(0, (nextMinutes[key] || 0) + direction * (next - cursor) / 60000);
+          cursor = next;
+        }
+      }
+    };
+    byDay(old?.segments || [], -1); byDay(segments.current, 1);
+    const record: FocusRecord = { id: sessionId.current, endedAt: end, minutes: elapsed, task: sessionTask.current, segments: [...segments.current], completed: completed || old?.completed === true };
+    const nextRecords = [...previous.filter(r => r.id !== record.id), record];
+    localStorage.setItem("pomo-minutes", JSON.stringify(nextMinutes));
+    localStorage.setItem("pomo-records", JSON.stringify(nextRecords));
+    setMinutes(nextMinutes); setRecords(nextRecords);
+    if (completed && !old?.completed) {
+      const h = load<Record<string, number>>("pomo-history", {}), key = today(new Date(end));
+      h[key] = (h[key] || 0) + 1; localStorage.setItem("pomo-history", JSON.stringify(h)); setHistory(h);
+    }
+  }, [mode, running]);
+
+  const checkpoint = useCallback(() => {
+    saveFocus();
+    const value = { mode, left: running ? remainingSeconds(endAt.current) : left, running: false, cycle, endAt: 0, total, segments: [...segments.current], segmentStart: 0, task: sessionTask.current, sessionId: sessionId.current };
+    localStorage.setItem("pomo-timer-checkpoint", JSON.stringify(value));
+  }, [saveFocus, mode, left, running, cycle, total]);
+  const checkpointRef = useRef(checkpoint); checkpointRef.current = checkpoint;
+  useEffect(() => {
+    const save = () => { if (JSON.parse(localStorage.getItem("pomo-timer") || "{}").running) checkpointRef.current(); };
+    window.addEventListener("pomo-before-sync", save);
+    window.addEventListener("pagehide", save);
+    const interval = setInterval(save, 15000);
+    return () => { clearInterval(interval); window.removeEventListener("pomo-before-sync", save); window.removeEventListener("pagehide", save); };
+  }, []);
+  const lastTimerState = useRef(`${mode}:${running}:${cycle}:${total}:${timerVersion}`);
+  useEffect(() => {
+    const state = `${mode}:${running}:${cycle}:${total}:${timerVersion}`;
+    if (lastTimerState.current === state) return;
+    lastTimerState.current = state;
+    checkpoint(); window.dispatchEvent(new Event("pomo-sync-request"));
+  }, [mode, running, cycle, total, checkpoint, timerVersion]);
 
   const changeView = async (next: typeof view) => {
     if (busy) return;
@@ -135,7 +192,6 @@ export default function App() {
   };
 
   useEffect(() => localStorage.setItem("pomo-settings", JSON.stringify(settings)), [settings]);
-  useEffect(() => localStorage.setItem("pomo-history", JSON.stringify(history)), [history]);
   useEffect(() => {
     localStorage.setItem("pomo-dark", dark ? "1" : "0");
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -146,6 +202,9 @@ export default function App() {
 
   const switchMode = useCallback(
     (next: Mode, autoRun = false) => {
+      saveFocus();
+      sessionId.current = crypto.randomUUID();
+      setTimerVersion(v => v + 1);
       setMode(next);
       setLeft(settings[next] * 60);
       setTotal(settings[next] * 60);
@@ -155,19 +214,13 @@ export default function App() {
       endAt.current = Date.now() + settings[next] * 60 * 1000;
       setRunning(autoRun);
     },
-    [settings, activeTask?.title]
+    [settings, activeTask?.title, saveFocus]
   );
 
   const complete = useCallback(() => {
     if (settings.sound) beep();
     if (mode === "focus") {
-      const finishedDay = today(new Date(endAt.current));
-      setHistory((h) => ({ ...h, [finishedDay]: (h[finishedDay] ?? 0) + 1 }));
-      setMinutes(h => ({ ...h, [finishedDay]: (h[finishedDay] ?? 0) + total / 60 }));
-      const finishedSegments = [...segments.current];
-      if (segmentStart.current && segmentStart.current < endAt.current) finishedSegments.push({ start: segmentStart.current, end: endAt.current });
-      const record: FocusRecord = { id: crypto.randomUUID(), endedAt: endAt.current, minutes: total / 60, task: sessionTask.current, segments: finishedSegments };
-      setRecords(r => [...r, record]);
+      saveFocus(endAt.current, true);
       const next = nextBreak(cycle, settings.every);
       const isLong = next.mode === "long";
       setCycle(next.cycle);
@@ -177,7 +230,7 @@ export default function App() {
       notify("Break complete", "Time to get back to work.");
       switchMode("focus", settings.autoStart);
     }
-  }, [mode, cycle, settings, switchMode, total]);
+  }, [mode, cycle, settings, switchMode, total, saveFocus]);
 
   // Timestamp-based tick so the timer stays accurate even if the window is throttled.
   useEffect(() => {
@@ -204,6 +257,8 @@ export default function App() {
     setRunning(!running);
   };
   const reset = () => {
+    saveFocus(); sessionId.current = crypto.randomUUID();
+    setTimerVersion(v => v + 1);
     setRunning(false);
     setLeft(settings[mode] * 60);
     setTotal(settings[mode] * 60);
@@ -213,7 +268,10 @@ export default function App() {
 
   const updateSetting = (key: keyof Settings, value: number | boolean) => {
     setSettings({ ...settings, [key]: value });
-    if (!running && typeof value === "number" && key === mode) { setLeft(value * 60); setTotal(value * 60); segments.current = []; segmentStart.current = 0; }
+    if (!running && typeof value === "number" && key === mode) {
+      saveFocus(); sessionId.current = crypto.randomUUID(); setTimerVersion(v => v + 1);
+      setLeft(value * 60); setTotal(value * 60); segments.current = []; segmentStart.current = 0;
+    }
   };
 
   const progress = total ? 1 - left / total : 0;
@@ -248,6 +306,7 @@ export default function App() {
           <button className="icon" onClick={() => setDark(!dark)} title="Theme">
             {dark ? "Light" : "Dark"}
           </button>
+          <button className="icon" onClick={() => window.dispatchEvent(new Event("pomo-open-account"))}>Account</button>
           <button className="icon" onClick={() => setShowSettings(!showSettings)} title="Settings">
             Settings
           </button>
@@ -304,9 +363,9 @@ export default function App() {
         <div><b>{allTime}</b><span>Total</span></div>
       </footer>
       {view === "full" && <>
-        <button className="statistics-link" onClick={() => { setShowPlanner(true); window.scrollTo(0, 0); }}><span><b>▤ Planner</b><small>Lists, matrix, timeline & habits</small></span><span>↗</span></button>
+        <button className="statistics-link planner-link" onClick={() => { setShowPlanner(true); window.scrollTo(0, 0); }}><span><b>▤ Planner</b><small>Lists, matrix, timeline & habits</small></span><span>↗</span></button>
         <button className="statistics-link calendar-link" onClick={() => { setShowCalendar(true); window.scrollTo(0, 0); }}><span><b>▦ Calendar</b><small>Plan your day, week & month</small></span><span>↗</span></button>
-        <button className="statistics-link" onClick={() => { setShowStats(true); window.scrollTo(0, 0); }}><span><b>◴ Focus Statistics</b><small>Trends, records & activity</small></span><span>↗</span></button>
+        <button className="statistics-link focus-statistics-link" onClick={() => { setShowStats(true); window.scrollTo(0, 0); }}><span><b>◴ Focus Statistics</b><small>Trends, records & activity</small></span><span>↗</span></button>
         <section className="goal"><div><span>Daily goal</span><b>{todayCount} / {settings.goal}</b></div><progress value={todayCount} max={settings.goal} /><small>{todayCount >= settings.goal ? "Goal reached. Great work!" : "Small steps, big results."}</small></section>
         <section className="tasks"><div className="section-heading"><h2>Tasks</h2><span>{tasks.filter(t => t.done).length}/{tasks.length}</span></div>
           <form onSubmit={e => { e.preventDefault(); if (!draft.trim()) return; setTasks([...tasks, { id: crypto.randomUUID(), title: draft.trim(), done: false }]); setDraft(""); }}><input aria-label="New task" placeholder="What will you focus on?" maxLength={160} value={draft} onChange={e => setDraft(e.target.value)} /><button type="submit" aria-label="Add task">+</button></form>
@@ -345,4 +404,5 @@ export default function App() {
     </main>
   );
 }
+
 

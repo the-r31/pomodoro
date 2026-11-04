@@ -3,6 +3,7 @@ export interface FocusRecord {
   endedAt: number;
   minutes: number;
   task: string;
+  completed?: boolean;
   segments: { start: number; end: number }[];
 }
 export type Period = "Day" | "Week" | "Month" | "Year";

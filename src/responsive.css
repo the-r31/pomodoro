@@ -1,0 +1,122 @@
+/* Shared viewport rules; compact native widgets keep their own geometry. */
+.app.view-full > *, .planner-page > *, .calendar-page > *, .analytics > * { min-width: 0; }
+.app.view-full > header { gap: 12px; flex-wrap: wrap; }
+.app.view-full .header-actions { flex-wrap: wrap; }
+.planner-tools, .panel-actions, .calendar-toolbar { flex-wrap: wrap; }
+.settings { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.settings label { gap: 12px; }
+.calendar-modal form { max-height: calc(100dvh - 32px); }
+.cloud-overlay { padding-bottom: max(22px, env(safe-area-inset-bottom)); }
+
+/* Phones: readable controls, safe-area spacing and contained chart scrolling. */
+@media (max-width: 599px) {
+  .app.view-full { padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); gap: 16px; }
+  .app.view-full > header h1 { font-size: 11px; letter-spacing: .16em; }
+  .app.view-full .header-actions { gap: 6px; }
+  .app.view-full .icon { min-height: 44px; padding: 0 5px; }
+  .app.view-full .tabs button, .app.view-full .controls button { min-height: 44px; }
+  .app.view-full .controls { width: 100%; justify-content: center; gap: 8px; }
+  .app.view-full .controls .primary { padding-inline: 30px; }
+  .app.view-full .controls .secondary { padding-inline: 14px; }
+  .app.view-full .widget-extras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app.view-full .widget-extras button { min-height: 40px; font-size: 11px; }
+  .planner-page:not(.planner-compact), .calendar-page, .analytics { padding-inline: 12px; }
+  .analytics-header { padding-top: max(12px, env(safe-area-inset-top)); }
+  .analytics-header h1 { font-size: 16px; }
+  .planner-tabs { flex-wrap: wrap; border-radius: 16px; }
+  .planner-tabs button { flex: 1 0 28%; min-height: 44px; }
+  .planner-tools button, .panel-actions button, .quick-add button { min-height: 44px; }
+  .planner-page:not(.planner-compact) .habit-heading,
+  .planner-page:not(.planner-compact) .habit-row { grid-template-columns: minmax(58px, 1fr) repeat(7, minmax(0, 1fr)); gap: 3px; }
+  .planner-page:not(.planner-compact) .habit-row > button { width: 100%; height: 36px; }
+  .calendar-toolbar { gap: 8px; }
+  .calendar-toolbar .period-tabs { flex: 1; }
+  .calendar-toolbar .period-tabs button { padding-inline: 12px; min-height: 44px; }
+  .calendar-heading { padding-inline: 8px; }
+  .calendar-heading h2 { font-size: 14px; }
+  .calendar-modal { padding: 10px; }
+  .calendar-modal form { padding: 16px; max-height: calc(100dvh - 20px); }
+  .color-choice { margin-right: 8px; }
+  .stat-card { padding: 16px; }
+  .metric { padding: 14px 12px; }
+  .metric h2 { font-size: 13px; }
+  .metric strong { overflow-wrap: anywhere; }
+  .period-tabs button { padding-inline: 10px; min-height: 44px; }
+  .heat-legend { flex-wrap: wrap; }
+  .cloud-overlay { padding-inline: 16px; }
+  .cloud-panel button { min-height: 44px; }
+  .app.view-full input:not([type="checkbox"]), .settings input,
+  .planner-page:not(.planner-compact) input:not([type="checkbox"]),
+  .planner-page:not(.planner-compact) select, .planner-page textarea,
+  .calendar-modal input:not([type="checkbox"]), .calendar-modal select,
+  .calendar-modal textarea, .cloud-panel input { font-size: 16px; }
+}
+
+@media (max-width: 359px) {
+  .app.view-full > header { justify-content: center; gap: 2px; }
+  .app.view-full .header-actions { width: 100%; justify-content: space-between; }
+  .matrix-grid { grid-template-columns: minmax(0, 1fr); }
+  .field-grid { grid-template-columns: minmax(0, 1fr); }
+  .calendar-toolbar > .text-button { width: 100%; min-height: 36px; }
+}
+
+/* Tablets keep a comfortable single-column workspace. */
+@media (min-width: 600px) and (max-width: 959px) {
+  .app.view-full { max-width: 640px; padding: 28px; gap: 20px; }
+  .app.view-full .timer { width: 260px; height: 260px; }
+  .planner-page:not(.planner-compact), .calendar-page, .analytics { padding-inline: 24px; }
+}
+
+/* Laptop / desktop: focus at left, planning at right. */
+@media (min-width: 960px) {
+  .app.view-full {
+    max-width: 1180px; padding: 32px; display: grid; align-content: start;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-areas: "header header" "widgets extras" "tabs planner" "timer calendar" "timer analytics" "timer goal" "controls tasks" "dots tasks" "stats tasks";
+    gap: 20px 40px; align-items: start;
+  }
+  .app.view-full > header { grid-area: header; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+  .app.view-full > header h1 { font-size: 16px; }
+  .app.view-full .icon { font-size: 12px; padding: 10px; }
+  .app.view-full > .widget-picker { grid-area: widgets; }
+  .app.view-full > .widget-extras { grid-area: extras; align-self: stretch; }
+  .app.view-full > .tabs { grid-area: tabs; }
+  .app.view-full > .timer { grid-area: timer; width: 310px; height: 310px; justify-self: center; align-self: center; }
+  .app.view-full .time span { font-size: 76px; }
+  .app.view-full > .controls { grid-area: controls; justify-self: center; }
+  .app.view-full > .dots { grid-area: dots; justify-self: center; }
+  .app.view-full > .stats { grid-area: stats; }
+  .app.view-full > .planner-link { grid-area: planner; }
+  .app.view-full > .calendar-link { grid-area: calendar; }
+  .app.view-full > .focus-statistics-link { grid-area: analytics; }
+  .app.view-full > .goal { grid-area: goal; }
+  .app.view-full > .tasks { grid-area: tasks; background: var(--surface); padding: 20px; border-radius: 18px; }
+  .app.view-full > .error { grid-column: 1 / -1; }
+  .statistics-link { padding: 18px 20px; }
+  .statistics-link b { font-size: 16px; }
+  .statistics-link small { font-size: 12px; }
+  .planner-page:not(.planner-compact), .calendar-page, .analytics { max-width: 1180px; padding: 8px 32px 40px; }
+  .analytics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+  .analytics > .analytics-header, .analytics > .metric-grid, .analytics > .analytics-footnote { grid-column: 1 / -1; }
+  .analytics .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; }
+  .analytics > .stat-card { margin: 0; align-self: stretch; }
+  .analytics-header { padding-block: 20px; }
+  .analytics-header h1 { font-size: 22px; }
+  .calendar-intro h2, .planner-heading h2 { font-size: 32px; }
+  .month-cell { height: 125px; padding: 8px; }
+  .calendar-chip { font-size: 12px; line-height: 17px; padding: 3px 6px; }
+  .day-number { width: 30px; height: 30px; font-size: 13px; }
+  .time-scroll { max-height: 600px; }
+  .planner-tabs button { min-height: 44px; font-size: 14px; }
+  .matrix-quadrant { padding: 22px; min-height: 240px; }
+  .matrix-quadrant h3, .matrix-quadrant .task-details b { font-size: 14px; }
+  .planner-task { padding: 16px; }
+  .task-details b { font-size: 14px; }
+  .habit-heading, .habit-row { grid-template-columns: minmax(180px, 1fr) repeat(7, 54px); gap: 14px; }
+  .habit-row > button { width: 44px; height: 44px; justify-self: center; }
+  .settings { inset: 40px auto auto 50%; transform: translateX(-50%); width: 500px; max-height: calc(100dvh - 80px); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 16px 80px #0009; gap: 12px; }
+  .settings .primary { margin-top: 24px; }
+  .cloud-overlay { background: #0009; padding-block: 40px; }
+  .cloud-panel { background: var(--bg); border: 1px solid var(--line); border-radius: 24px; padding: 28px; max-width: 480px; }
+  .reminder-stack { left: auto; width: 380px; }
+}

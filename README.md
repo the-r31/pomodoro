@@ -1,5 +1,22 @@
 # Pomodoro (Tauri v2 + React + TS)
 
+## Personal cloud sync (Supabase)
+1. Copy `.env.example` to `.env.local` and set your project URL and **publishable** key. Never use a secret/service-role key in this desktop app.
+2. Run `supabase/setup-personal-sync.sql` in your project's SQL Editor. It creates an owner-only table, RLS policies, and revision trigger. The statements at the end report the grants and policies.
+3. Restart the development process after changing `.env.local`, or rebuild the packaged app.
+4. Open **Account → Create account**, confirm your email, and sign in. If the email link redirects to an unavailable localhost page after confirmation, return to the app and sign in. Configure the Supabase Auth Site URL for your actual deployed web frontend when adding one.
+5. Choose **Check cloud workspace**. On the first device, explicitly upload your workspace. On another device, sign into the same account and choose **Use cloud workspace**.
+
+The first version syncs a private workspace snapshot about every 15 seconds, checking a small revision number before downloading the workspace. It is personal sync, not team collaboration. Offline edits stay local and are retried on reconnect. If both copies change, sync pauses and asks which complete version to keep; it does not silently merge or overwrite. The losing copy is backed up locally and both copies can be downloaded before choosing.
+
+Synced: tasks/activity, lists/photos, habits, saved filters, focus history and settings. Timer checkpoints also sync and restore paused on another device. Focus time is saved every 15 seconds and on pause, skip, reset or completion; only completed sessions increment the Pomo count. Not synced: auth tokens, live timer execution, window state, reminder-delivery state. Supabase Auth manages the local login session separately. Switching workspaces restores the saved timer paused. Loading remote changes while already connected preserves the local timer but returns the UI to its main screen.
+
+Signing out restores the previous guest workspace and saves an account-specific local backup. After signing back in, **Resume saved account copy** recovers that backup, including unsynced edits, before comparing it with cloud changes. Local backups are not encrypted; the operating-system account protects access. The last conflict backup is stored in `pomo-conflict-backup`.
+
+Cloud workspaces are limited to approximately 4 MB; large photo collections may need smaller images. The current implementation supports one active app instance per device storage profile. A future version can use per-record sync and multi-window locking.
+
+Verification: `tests/cloud.test.mjs` tests snapshot boundaries and conflict decisions. `tests/cloud-ui.mjs` uses a mock Supabase backend to test two devices, offline retry, account isolation and sign-out; it sends no real emails. Actual authenticated two-device verification requires your own confirmed account on the configured project.
+
 ## Personal planner
 - **Planner → Lists**: create/rename lists, organize tasks, set priority and notes, pick a gradient background or upload a local PNG/JPEG/WebP photo under 500 KB. Removing a list moves its tasks to Inbox.
 - **Matrix**: four Eisenhower quadrants. High/medium priority is important; tasks starting today or earlier are urgent. Each task can override these automatic rules.
@@ -44,7 +61,7 @@ node --experimental-strip-types --test tests/timer.test.mjs tests/statistics.tes
 Ixtiyoriy UI smoke test: Microsoft Edge va `playwright` o‘rnatilgan bo‘lsa, `node tests/ui-smoke.mjs` ishlating. Test vaqtinchalik brauzer profilida ishlaydi, o‘z Vite serverini 1421-portda ochib yopadi va `tests/*-preview.png` rasmlarini yaratadi. Playwright boshqa joyda bo‘lsa, uning `index.mjs` fayliga `file:///...` URLni birinchi argument sifatida bering.
 
 ## Talablar
-- Node 18+
+- Node 22.6+
 - Rust (https://rustup.rs)
 - OS dependency'lar: https://tauri.app/start/prerequisites/
 
@@ -56,3 +73,4 @@ npm run tauri icon app-icon.png # barcha iconlarni generatsiya qiladi
 npm run tauri dev               # development
 npm run tauri build             # .exe / .dmg / .deb / .AppImage
 ```
+

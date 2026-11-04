@@ -72,6 +72,10 @@ try {
   // Seed an isolated browser profile with a nearly completed focus session.
   await page.evaluate(() => {
     const now = Date.now();
+    // Earlier reset/paused sessions now intentionally retain partial focus records.
+    localStorage.removeItem('pomo-records');
+    localStorage.removeItem('pomo-minutes');
+    localStorage.removeItem('pomo-history');
     localStorage.setItem('pomo-settings', JSON.stringify({ focus: 25, sound: false }));
     localStorage.setItem('pomo-timer', JSON.stringify({ mode: 'focus', left: 1, running: true, cycle: 0, endAt: now + 500, total: 1500, segmentStart: now - 1499500, segments: [], task: 'Design study' }));
   });
