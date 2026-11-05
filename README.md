@@ -1,6 +1,8 @@
 # Pomodoro (Tauri v2 + React + TS)
 
 ## Personal cloud sync (Supabase)
+Production builds include this project's public URL and publishable key from `.env.production`, so GitHub-based hosting does not need the ignored `.env.local` file. These are browser-visible values, not server credentials. To deploy against a different Supabase project, set both `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in the hosting build environment or `.env.production.local`. Never add a secret or service-role key. The build fails if either value is missing.
+
 The Account screen groups profile editing, password changes, and sync/backup controls. Signing in checks for an existing cloud workspace automatically; uploading or replacing local data still requires choosing a workspace. Conflict cards show task counts and up to three task titles from each copy.
 
 For password recovery, choose **Forgot password?**, request the email, then copy the original recovery link from the email into **Recovery link** without opening it. This verifies the recovery token inside the desktop app, avoiding a browser-to-desktop redirect. Set and confirm the new password under **Security**. Used or expired links require a new recovery email. Standard Supabase recovery links with `token` or `token_hash` and `type=recovery` are supported; custom email templates must preserve those parameters. Email delivery and real recovery tokens still require testing against the configured project's email setup; automated UI tests use a mock backend only.
