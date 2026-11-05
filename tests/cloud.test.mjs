@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { capture, applySnapshot, decideSync, validateSnapshot, fingerprint } from '../src/cloud-data.ts';
 function store() { const data = new Map(); return { getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: k => data.delete(k) }; }
+test('storage failure rolls back exact values including absent canonical workspace', () => {
+  const target = store();
+  target.setItem('pomo-tasks', '[{"id":"old","title":"Unsynced","done":false}]');
+  const remote = store(); remote.setItem('pomo-tasks', '[{"id":"new","title":"Remote","done":false}]');
+  const original = target.setItem; let fail = true;
+  target.setItem = (key, value) => { if (key === 'pomo-tasks' && fail) { fail = false; throw new Error('Quota exceeded'); } original(key, value); };
+  assert.throws(() => applySnapshot(target, capture(remote)), /Quota/);
+  assert.equal(target.getItem('pomo-workspace'), null);
+  assert.match(target.getItem('pomo-tasks'), /Unsynced/);
+});
 test('old snapshots remain readable and timer checkpoints sync without live execution', () => {
   const s = store(), old = capture(s); delete old.values['pomo-timer-checkpoint'];
   validateSnapshot(old); assert.equal(fingerprint(old), fingerprint(capture(s)));

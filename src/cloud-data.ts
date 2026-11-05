@@ -42,12 +42,19 @@ export function validateSnapshot(input: unknown): asserts input is Snapshot {
 }
 export function applySnapshot(store: Store, data: Snapshot) {
   validateSnapshot(data);
-  const before = capture(store);
+  const keys = [...cloudKeys, "pomo-tasks"];
+  const before = new Map(keys.map(key => [key, store.getItem(key)]));
   try {
     for (const key of cloudKeys) { const value = data.values[key]; if (value == null) store.removeItem(key); else store.setItem(key, value); }
     store.setItem("pomo-tasks", JSON.stringify(JSON.parse(data.values["pomo-workspace"] || '{"tasks":[]}').tasks));
   } catch (error) {
-    for (const key of cloudKeys) { const value = before.values[key]; if (value === null) store.removeItem(key); else store.setItem(key, value); }
+    // Attempt every rollback even if one storage write fails. Preserve absent keys too.
+    const failures: unknown[] = [];
+    for (const [key, value] of before) {
+      try { if (value === null) store.removeItem(key); else store.setItem(key, value); }
+      catch (failure) { failures.push(failure); }
+    }
+    if (failures.length) throw new Error("Device storage failed. Stop editing and recover the saved workspace backup before continuing.");
     throw error;
   }
 }

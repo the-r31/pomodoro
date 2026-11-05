@@ -9,6 +9,8 @@ const rows = new Map(); let configured = false; let offline = false;
 const alice = '11111111-1111-4111-8111-111111111111', bob = '22222222-2222-4222-8222-222222222222';
 const profiles = new Map();
 const authCalls = [];
+const usedRecovery = new Set();
+let rejectRefresh = false;
 const user = (id) => ({ id, aud: 'authenticated', role: 'authenticated', email: id === alice ? 'alice@example.test' : 'bob@example.test', app_metadata: { provider: 'email' }, user_metadata: profiles.get(id) || {}, created_at: new Date().toISOString() });
 const jwt = id => `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: id, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.test`;
 const uid = req => { try { return JSON.parse(Buffer.from(req.headers().authorization.split(' ')[1].split('.')[1], 'base64url')).sub; } catch { return null; } };
@@ -16,15 +18,18 @@ async function makePage() {
   const context = await browser.newContext({ viewport: { width: 420, height: 780 } });
   await context.route('https://tbqqyqxnlmsgwjeinxpd.supabase.co/**', async route => {
     const req = route.request(), url = new URL(req.url());
-    const reply = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    const reply = (body, status = 200) => route.fulfill({ status, headers: { 'x-supabase-api-version': '2024-01-01', 'access-control-expose-headers': 'x-supabase-api-version' }, contentType: 'application/json', body: JSON.stringify(body) });
     if (url.pathname.endsWith('/token')) {
+      if (url.searchParams.get('grant_type') === 'refresh_token' && rejectRefresh) return reply({ code: 'refresh_token_not_found', message: 'Refresh token expired' }, 400);
       const body = req.postDataJSON(), id = body.email === 'bob@example.test' ? bob : alice;
       return reply({ access_token: jwt(id), refresh_token: `refresh-${id}`, token_type: 'bearer', expires_in: 3600, user: user(id) });
     }
     if (url.pathname.endsWith('/recover') || url.pathname.endsWith('/resend')) { authCalls.push(url.pathname); return reply({}); }
     if (url.pathname.endsWith('/verify')) {
       assert.equal(req.postDataJSON().type, 'recovery');
-      assert.equal(req.postDataJSON().token_hash, 'test-recovery-token');
+      const token = req.postDataJSON().token_hash;
+      if (token === 'expired-token' || usedRecovery.has(token)) return reply({ code: 'otp_expired', message: 'Token expired or already used' }, 403);
+      assert.equal(token, 'test-recovery-token'); usedRecovery.add(token);
       return reply({ access_token: jwt(alice), refresh_token: 'recovery-refresh', token_type: 'bearer', expires_in: 3600, user: user(alice) });
     }
     if (url.pathname.endsWith('/user') && req.method() === 'PUT') {
@@ -77,7 +82,12 @@ try {
   await account.getByRole('button', { name: 'Send recovery email', exact: true }).click();
   await account.getByRole('status').filter({ hasText: 'recovery email is on its way' }).waitFor();
   assert.ok(authCalls.some(p => p.endsWith('/recover')));
-  await account.getByLabel('Recovery link', { exact: true }).fill('https://example.test/?token=test-recovery-token&type=recovery');
+  await account.getByLabel('Recovery link', { exact: true }).fill('https://tbqqyqxnlmsgwjeinxpd.supabase.co/auth/v1/verify?token=expired-token&type=recovery');
+  await account.getByRole('button', { name: 'Verify recovery link', exact: true }).click();
+  await account.getByRole('alert').waitFor();
+  assert.match(await account.getByRole('alert').textContent(), /expired or was already used/);
+  assert.equal(await account.getByLabel('New password', { exact: true }).count(), 0);
+  await account.getByLabel('Recovery link', { exact: true }).fill('https://tbqqyqxnlmsgwjeinxpd.supabase.co/auth/v1/verify?token=test-recovery-token&type=recovery');
   await account.getByRole('button', { name: 'Verify recovery link', exact: true }).click();
   await account.getByLabel('New password', { exact: true }).fill('new-password-123');
   await account.getByLabel('Confirm new password', { exact: true }).fill('mismatch-password');
@@ -95,6 +105,13 @@ try {
   assert.equal(rows.size, 0, 'Profile and recovery must not upload a workspace');
   await account.screenshot({ path: 'tests/account-preview.png', fullPage: false });
   await account.context().close();
+  const reused = await makePage(); await open(reused);
+  await reused.getByRole('button', { name: 'Forgot password?', exact: true }).click();
+  await reused.getByLabel('Recovery link', { exact: true }).fill('https://tbqqyqxnlmsgwjeinxpd.supabase.co/auth/v1/verify?token=test-recovery-token&type=recovery');
+  await reused.getByRole('button', { name: 'Verify recovery link', exact: true }).click();
+  await reused.getByRole('alert').filter({ hasText: 'expired or was already used' }).waitFor();
+  assert.equal(await reused.getByLabel('New password', { exact: true }).count(), 0);
+  await reused.context().close();
   const p1 = await makePage();
   await addTask(p1, 'Original local');
   await signIn(p1, 'alice@example.test'); assert.equal(rows.size, 0);
@@ -119,6 +136,13 @@ try {
   await p2.getByRole('button', { name: 'Keep cloud version', exact: true }).click();
   await p2.waitForFunction(() => !!localStorage.getItem('pomo-conflict-backup'));
   assert.match(await p2.evaluate(() => localStorage.getItem('pomo-conflict-backup')), /Device two pending/);
+  await p2.locator('summary').filter({ hasText: 'Recover previous conflict copy' }).click();
+  await p2.getByRole('button', { name: 'Restore device copy and pause sync', exact: true }).click();
+  assert.equal(await p2.evaluate(() => localStorage.getItem('pomo-sync-paused')), '1');
+  assert.match(await p2.evaluate(() => localStorage.getItem('pomo-workspace')), /Device two pending/);
+  assert.match(await p2.evaluate(id => localStorage.getItem(`pomo-cloud-backup:${id}`), alice), /Device one concurrent/);
+  await p2.getByRole('button', { name: 'Resume sync', exact: true }).click();
+  await sync(p2);
   await close(p2); await addTask(p2, 'Offline task'); offline = true; await open(p2); await sync(p2);
   await p2.waitForFunction(() => document.querySelector('.cloud-status')?.textContent?.includes('Not synced'));
   offline = false; await sync(p2); assert.match(rows.get(alice).data.values['pomo-workspace'], /Offline task/);
@@ -161,5 +185,28 @@ try {
   await p1.getByRole('button', { name: 'Start with an empty workspace', exact: true }).click();
   await p1.getByRole('button', { name: 'Sync now', exact: true }).waitFor();
   assert.doesNotMatch(rows.get(bob).data.values['pomo-workspace'], /Original local|Offline task/);
-  console.log('PASS: explicit upload, setup errors, two-device sync, conflicts/backups, offline retry, account isolation and sign-out restore (mock backend)');
+  const expiry = await makePage(); await signIn(expiry, 'alice@example.test');
+  await expiry.getByRole('button', { name: 'Use cloud workspace', exact: true }).click();
+  await expiry.getByRole('button', { name: 'Pause sync', exact: true }).click(); await close(expiry);
+  await addTask(expiry, 'Keep my unsynced work');
+  await expiry.evaluate(() => { const auth = JSON.parse(localStorage.getItem('pomo-auth')); auth.expires_at = 1; localStorage.setItem('pomo-auth', JSON.stringify(auth)); });
+  rejectRefresh = true; await expiry.reload();
+  await expiry.getByLabel('Email', { exact: true }).waitFor();
+  assert.equal(await expiry.locator('.tasks').count(), 0, 'Expired session must hide saved tasks');
+  assert.match(await expiry.evaluate(() => localStorage.getItem('pomo-workspace')), /Keep my unsynced work/);
+  assert.equal(await expiry.getByRole('button', { name: 'Download workspace backup', exact: true }).isDisabled(), true);
+  rejectRefresh = false;
+  await expiry.getByLabel('Email', { exact: true }).fill('alice@example.test');
+  await expiry.getByLabel('Password', { exact: true }).fill('test-password-123');
+  await expiry.locator('.cloud-panel form').getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expiry.getByRole('button', { name: 'Account', exact: true }).waitFor(); await open(expiry);
+  await expiry.getByRole('button', { name: 'Resume sync', exact: true }).waitFor();
+  await close(expiry); assert.match(await expiry.locator('.tasks').textContent(), /Keep my unsynced work/);
+  await open(expiry); await expiry.getByRole('button', { name: 'Sign out on this device', exact: true }).click();
+  await expiry.getByLabel('Email', { exact: true }).waitFor(); await close(expiry);
+  await signIn(expiry, 'alice@example.test');
+  await expiry.getByRole('button', { name: 'Resume saved account copy', exact: true }).click();
+  await close(expiry); assert.match(await expiry.locator('.tasks').textContent(), /Keep my unsynced work/);
+  await expiry.context().close();
+  console.log('PASS: expired/reused recovery, session expiry, unsynced backup restoration, conflict recovery; explicit upload, setup errors, two-device sync, conflicts/backups, offline retry, account isolation and sign-out restore (mock backend)');
 } finally { await browser?.close(); server.kill(); }

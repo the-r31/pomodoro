@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "./supabase-client";
+import { recoveryError, recoveryToken } from "./account-security";
 
 export default function AccountAccess() {
   const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
@@ -17,7 +18,7 @@ export default function AccountAccess() {
         : mode === "reset" ? await supabase.auth.resetPasswordForEmail(email.trim())
         : mode === "signup" ? await supabase.auth.signUp({ email: email.trim(), password })
         : await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (result.error) throw result.error;
+      if (result.error) throw new Error(recoveryError(result.error));
       setPassword("");
       if (mode === "reset") setMessage("If this email has an account, a recovery email is on its way. Copy the recovery link from that email and paste it below without opening it.");
       else if (resend || mode === "signup") setMessage("Check your email to confirm your account, then return here to sign in.");
@@ -46,12 +47,10 @@ function RecoveryLink() {
   return <form onSubmit={async e => {
     e.preventDefault(); if (!supabase || busy) return; setBusy(true); setError("");
     try {
-      const url = new URL(link.trim());
-      const token = url.searchParams.get("token_hash") || url.searchParams.get("token");
-      if (url.searchParams.get("type") !== "recovery" || !token) throw new Error("Copy the original recovery link from your email. If it has already been used, request a new email.");
+      const token = recoveryToken(link, import.meta.env.VITE_SUPABASE_URL);
       // Send only the token to our configured auth server; never navigate to the pasted URL.
       const result = await supabase.auth.verifyOtp({ token_hash: token, type: "recovery" });
-      if (result.error) throw result.error;
+      if (result.error) throw new Error(recoveryError(result.error));
       setLink("");
     } catch (err) { setError(err instanceof Error ? err.message : "Invalid recovery link."); }
     finally { setBusy(false); }
@@ -71,7 +70,7 @@ export function AccountProfile({ name, recovering, onSaved }: { name: string; re
       if (security && password !== confirm) throw new Error("Passwords do not match.");
       const result = await supabase.auth.updateUser(security ? { password } : { data: { display_name: draft.trim() } });
       if (result.error) throw result.error;
-      setPassword(""); setConfirm(""); setMessage(security ? "Password updated." : "Profile saved."); onSaved();
+      setPassword(""); setConfirm(""); setMessage(security ? "Password updated." : "Profile saved."); if (security) onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save changes."); }
     finally { setBusy(false); }
   };
